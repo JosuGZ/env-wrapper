@@ -132,7 +132,9 @@ fn master(master_file_descriptor: File) {
 /// As the slave, for now we just run "screen" (it has to be installed). Screen
 /// will receive altered data from the master side of the pseudoterminal.
 fn slave() {
-  let mut command = Command::new("screen");
+  let command_name = std::env::args().nth(1).unwrap_or("screen".into());
+
+  let mut command = Command::new(command_name);
   command.stdin(Stdio::inherit());
   command.stdout(Stdio::inherit());
   command.stderr(Stdio::inherit());
