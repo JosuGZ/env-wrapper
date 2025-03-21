@@ -1,45 +1,15 @@
-// TODO: This is crappy and unsafe is used without care. Replace with the clib
-// crate.
+// TODO: This is crappy and unsafe is used without care. Ideally we should use
+// safe bindings.
 
-use std::ffi::{c_char, c_int, CStr};
+use std::ffi::{c_int, CStr};
 use std::fs::File;
 use std::os::fd::FromRawFd;
 
-extern "C" {
-  fn fork() -> c_int;
-  /// Returns the process ID
-  fn getpid() -> c_int;
-
-  /// Finds and opens an unused pseudoterminal master device, and returns a file
-  /// descriptor that can later be used to refer to this device.
-  fn posix_openpt(flags: c_int) -> c_int;
-  // fn ptsname(mfd: c_int) -> *const c_char;
-  /// Devuelve 0 en caso de éxito, -1 en otro caso
-  fn unlockpt(mfd: c_int) -> c_int;
-
-
-  fn dup2(a: c_int, b: c_int) -> c_int;
-  fn open(path: *const c_char) -> c_int;
-  fn setsid() -> c_int;
+unsafe fn perror(msg: &CStr) {
+  libc::perror(msg.as_ptr());
 }
 
-const O_RDWR: i32   = 0x0002; // 00000002;
-const O_NOCTTY: i32 = 0x0100; // 00000400;
-
-mod libc {
-  use std::ffi::{c_void, c_int, c_char};
-  extern "C" {
-    pub fn perror(s: *const c_char) -> c_void;
-    pub fn ptsname(mfd: c_int) -> *const c_char;
-  }
-}
-
-fn perror(msg: &CStr) {
-  unsafe { libc::perror(msg.as_ptr()); }
-}
-
-/// Hmmm, el bufer podría ser problemático
-fn ptsname(mfd: c_int) -> Option<&'static CStr> {
+unsafe fn ptsname(mfd: c_int) -> Option<&'static CStr> {
   // https://www.man7.org/linux/man-pages/man3/ptsname.3.html
   let result = unsafe { libc::ptsname(mfd) };
   match result {
@@ -52,13 +22,13 @@ pub fn run_in_pseudoterminal(
   master_code: impl FnOnce(File),
   slave_code: impl FnOnce()
 ) {
-  let pid = unsafe { getpid() };
+  let pid = unsafe { libc::getpid() };
   println!("My PID is {pid}");
 
   let (mfd, name) = unsafe { create_pty_master() };
   println!("Pseudoterminal created: {name}");
 
-  let fork_result = unsafe { fork() };
+  let fork_result = unsafe { libc::fork() };
 
   match fork_result {
 
@@ -80,8 +50,8 @@ pub fn run_in_pseudoterminal(
   }
 }
 
-pub unsafe fn create_pty_master() -> (c_int, String) {
-  let res = posix_openpt(O_RDWR | O_NOCTTY);
+unsafe fn create_pty_master() -> (c_int, String) {
+  let res = libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY);
   let mfd = match res {
     mfd if mfd > 0 => {
       println!("We have a pseudoterminal at fd {mfd}");
@@ -93,7 +63,7 @@ pub unsafe fn create_pty_master() -> (c_int, String) {
     }
   };
 
-  let res = unlockpt(mfd);
+  let res = libc::unlockpt(mfd);
   if res != 0 {
     perror(c"Failed to unlock the pseudoterminal");
     panic!("Failed to unlock the pseudoterminal");
@@ -110,18 +80,18 @@ pub unsafe fn create_pty_master() -> (c_int, String) {
 
 /// Conecta el proceso actual al extremo esclavo de pseudoterminal, de modo que
 /// recibe su input y manda su output al maestro.
-pub unsafe fn connect_to_pty_slave(mfd: i32) {
+unsafe fn connect_to_pty_slave(mfd: i32) {
   // Close mfd
-  assert!(setsid() != -1);
+  assert!(libc::setsid() != -1);
   let name = ptsname(mfd);
-  let sfd = open(name.unwrap().as_ptr());
+  let sfd = libc::open(name.unwrap().as_ptr(), 0);
   println!(
     "Slave opened, name: {}, descriptor: {}",
     name.unwrap().to_string_lossy(), sfd
   );
-  dup2(sfd, 0);
-  dup2(sfd, 1);
-  dup2(sfd, 2);
+  libc::dup2(sfd, 0);
+  libc::dup2(sfd, 1);
+  libc::dup2(sfd, 2);
   println!(
     "Ready to run child..."
   );
