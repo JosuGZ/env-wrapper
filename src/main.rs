@@ -16,8 +16,7 @@ fn main() {
 /// Disables echo and allows to read characters without waiting for and end of
 /// line
 fn configure_terminal() -> Termios {
-  let stdin = 0; // couldn't get std::os::unix::io::FromRawFd to work
-                 // on /dev/stdin or /dev/tty
+  let stdin = libc::STDIN_FILENO;
   let mut termios = Termios::from_fd(stdin).unwrap();
   termios.c_lflag &= !(ICANON | ECHO); // no echo and canonical mode
   tcsetattr(stdin, TCSANOW, &termios).unwrap();
