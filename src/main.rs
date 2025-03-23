@@ -1,8 +1,10 @@
 use std::io::{self, stdin, stdout, Read, Write};
 use std::env::var;
+use std::os::fd::AsRawFd;
 use std::process::{Command, Stdio};
-use std::thread::JoinHandle;
+use std::thread::{sleep, JoinHandle};
 use std::fs::File;
+use std::time::Duration;
 
 use termios::{Termios, tcsetattr, TCSANOW, ICANON, ECHO};
 
@@ -77,6 +79,10 @@ fn master(master_file_descriptor: File) {
     stdout().flush().unwrap();
   }
 
+  let mfd = slave_sink.as_raw_fd();
+  resize_terminal(libc::STDIN_FILENO, mfd);
+  start_window_resize_task(libc::STDIN_FILENO, mfd);
+
   // We send data from the terminal to the slave, after performing subtitutions
   loop {
     stdin().read_exact(&mut buf).unwrap();
@@ -138,4 +144,16 @@ fn slave() {
   command.stdout(Stdio::inherit());
   command.stderr(Stdio::inherit());
   command.spawn().unwrap().wait().unwrap();
+}
+
+/// This checks if the window has been resized, to forward it to the slave. It
+/// does it every second. This should be donw with the SIGWINCH terminal but
+/// aparently doesn't work with the integrated terminal form VS Code.
+fn start_window_resize_task(fd_from: i32, fd_to: i32) {
+  std::thread::spawn(move || {
+    loop {
+      resize_terminal(fd_from, fd_to);
+      sleep(Duration::from_secs(1));
+    }
+  });
 }

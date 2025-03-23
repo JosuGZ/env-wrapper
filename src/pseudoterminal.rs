@@ -90,20 +90,6 @@ unsafe fn connect_to_pty_slave(mfd: i32) {
     name.unwrap().to_string_lossy(), sfd
   );
 
-  let mut winsize = libc::winsize {
-    ws_col: 80,
-    ws_row: 24,
-    ws_xpixel: 0,
-    ws_ypixel: 0
-  };
-
-  // Configuring the pseudoterminal size to match the terminal size. We should
-  // watch for changes as for now it is static
-  unsafe {
-    assert!(libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut winsize) == 0);
-    assert!(libc::ioctl(sfd, libc::TIOCSWINSZ, &winsize) == 0);
-  }
-
   libc::dup2(sfd, 0);
   libc::dup2(sfd, 1);
   libc::dup2(sfd, 2);
@@ -111,4 +97,17 @@ unsafe fn connect_to_pty_slave(mfd: i32) {
   println!(
     "Ready to run child..."
   );
+}
+
+/// Configures the pseudoterminal size to match the terminal size.
+pub fn resize_terminal(fd_from: i32, fd_to: i32) {
+  let mut winsize = libc::winsize {
+    ws_col: 80, ws_row: 24,
+    ws_xpixel: 0, ws_ypixel: 0
+  };
+
+  unsafe {
+    assert!(libc::ioctl(fd_from, libc::TIOCGWINSZ, &mut winsize) == 0);
+    assert!(libc::ioctl(fd_to, libc::TIOCSWINSZ, &winsize) == 0);
+  }
 }
